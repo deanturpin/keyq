@@ -1,0 +1,68 @@
+# keyq Project Rules
+
+## Audio Processing
+
+- FFT visualisations default to logarithmic X-axis scaling for musical analysis
+- Always use vDSP/Accelerate framework for DSP operations (not manual loops)
+- Audio processing happens in C++ DSP kernel, UI rendering in Swift
+- Sample rate can be 44.1 kHz or 48 kHz - always query from audio unit
+- FFT sizes must be powers of 2 (512, 1024, 2048, 4096, 8192)
+- Frequency resolution = sampleRate / FFTSize
+
+## Code Organisation
+
+- DSP code: C++ in `keyqExtension/DSP/`
+- UI code: SwiftUI in `keyqExtension/UI/`
+- Use Canvas for high-performance FFT rendering (not standard SwiftUI shapes)
+- Parameters defined in `keyqExtension/Parameters/Parameters.swift`
+- Shared utilities in `keyqExtension/Common/`
+
+## Audio Unit Architecture
+
+- Audio Unit V3 (AUv3) plugin architecture
+- `keyqExtensionAudioUnit.swift` - main AU class
+- `AudioUnitViewController.swift` - view controller with SwiftUI integration
+- `keyqExtensionDSPKernel.hpp` - C++ DSP processing kernel
+- Always set `preferredContentSize` in view controller for proper plugin window sizing
+- Use `NSHostingController.sizingOptions = [.preferredContentSize]` on macOS
+
+## Development Workflow
+
+- Use `make build-release` for optimised builds
+- Use `make install-app` to install to /Applications
+- Clear AU cache after plugin changes: `killall AudioComponentRegistrar && rm -rf ~/Library/Caches/AudioUnitCache && pluginkit -r`
+- Git hash automatically injected into build for version tracking
+
+## Visual Design
+
+- Background colour: `Color(red: 0.1, green: 0.12, blue: 0.18)` - dark blue-grey
+- FFT bars: Blue gradient (bright blue at top fading to background)
+- Frequency markers: White at 10% opacity
+- Note labels: Yellow with opacity based on magnitude
+- Sustained signals get brighter over time (persistence-based brightness)
+- Gradient strength proportional to bar height (short bars = less gradient)
+
+## Performance Tuning
+
+Key parameters for responsiveness vs smoothness trade-offs:
+
+- `smoothingFactor` - FFT magnitude temporal smoothing (0.0 = instant, 0.5 = very smooth)
+- `maxPersistenceFrames` - frames to reach full brightness (30-180 typical)
+- `minPersistenceFrames` - threshold before showing note labels (3-60 typical)
+- `persistenceThreshold` - dB level to consider bin "active" (-80 to -40 typical)
+
+## Testing Notes
+
+- Test with both tonal (sustained notes) and percussive (transients) audio
+- Verify logarithmic spacing: low frequencies should have more screen space
+- Check note labels only appear for sustained pitches (not transients)
+- Brightness should increase gradually for held notes
+- Plugin window should be wide (1400×280) not square
+
+## Common Pitfalls
+
+- Don't use linear frequency spacing - always logarithmic for musical content
+- Don't forget to convert Float to Double for SwiftUI Color values
+- Always pass `binPersistence` array to FFTView (not just magnitudes)
+- Remember to clear AU cache when testing plugin changes
+- Window dimensions set in both `keyqExtensionMainView.swift` frame() and `AudioUnitViewController.swift` preferredContentSize

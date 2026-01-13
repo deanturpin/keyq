@@ -1,0 +1,136 @@
+//
+//  AudioUnitViewController.swift
+//  keyqExtension
+//
+//  Created by Dean Turpin on 12/01/2026.
+//
+
+import Combine
+import CoreAudioKit
+import os
+import SwiftUI
+
+private let log = Logger(subsystem: "Audieaux.keyqExtension", category: "AudioUnitViewController")
+
+@MainActor
+public class AudioUnitViewController: AUViewController, AUAudioUnitFactory {
+    var audioUnit: AUAudioUnit?
+    
+    var hostingController: HostingController<keyqExtensionMainView>?
+    
+    private var observation: NSKeyValueObservation?
+
+	/* iOS View lifcycle
+	public override func viewWillAppear(_ animated: Bool) {
+		super.viewWillAppear(animated)
+
+		// Recreate any view related resources here..
+	}
+
+	public override func viewDidDisappear(_ animated: Bool) {
+		super.viewDidDisappear(animated)
+
+		// Destroy any view related content here..
+	}
+	*/
+
+	/* macOS View lifcycle
+	public override func viewWillAppear() {
+		super.viewWillAppear()
+		
+		// Recreate any view related resources here..
+	}
+
+	public override func viewDidDisappear() {
+		super.viewDidDisappear()
+
+		// Destroy any view related content here..
+	}
+	*/
+
+	deinit {
+	}
+
+    public override func viewDidLoad() {
+        super.viewDidLoad()
+        
+        // Accessing the `audioUnit` parameter prompts the AU to be created via createAudioUnit(with:)
+        guard let audioUnit = self.audioUnit else {
+            return
+        }
+        configureSwiftUIView(audioUnit: audioUnit)
+    }
+    
+	nonisolated public func createAudioUnit(with componentDescription: AudioComponentDescription) throws -> AUAudioUnit {
+		return try DispatchQueue.main.sync {
+			
+			audioUnit = try keyqExtensionAudioUnit(componentDescription: componentDescription, options: [])
+			
+			guard let audioUnit = self.audioUnit as? keyqExtensionAudioUnit else {
+				log.error("Unable to create keyqExtensionAudioUnit")
+				return audioUnit!
+			}
+			
+			defer {
+				// Configure the SwiftUI view after creating the AU, instead of in viewDidLoad,
+				// so that the parameter tree is set up before we build our @AUParameterUI properties
+				DispatchQueue.main.async {
+					self.configureSwiftUIView(audioUnit: audioUnit)
+				}
+			}
+			
+			audioUnit.setupParameterTree(keyqExtensionParameterSpecs.createAUParameterTree())
+			
+			self.observation = audioUnit.observe(\.allParameterValues, options: [.new]) { object, change in
+				guard let tree = audioUnit.parameterTree else { return }
+				
+				// This insures the Audio Unit gets initial values from the host.
+				for param in tree.allParameters { param.value = param.value }
+			}
+			
+			guard audioUnit.parameterTree != nil else {
+				log.error("Unable to access AU ParameterTree")
+				return audioUnit
+			}
+			
+			return audioUnit
+		}
+	}
+    
+    private func configureSwiftUIView(audioUnit: AUAudioUnit) {
+        if let host = hostingController {
+            host.removeFromParent()
+            host.view.removeFromSuperview()
+        }
+        
+        guard let observableParameterTree = audioUnit.observableParameterTree,
+              let keyqAU = audioUnit as? keyqExtensionAudioUnit else {
+            return
+        }
+        
+        let content = keyqExtensionMainView(parameterTree: observableParameterTree, audioUnit: keyqAU)
+        let host = HostingController(rootView: content)
+
+        // Configure hosting controller sizing for macOS
+        #if os(macOS)
+        host.sizingOptions = [.preferredContentSize]
+        #endif
+
+        self.addChild(host)
+        host.view.frame = self.view.bounds
+        self.view.addSubview(host.view)
+        hostingController = host
+
+        // Set preferred content size to match SwiftUI view's ideal dimensions
+        self.preferredContentSize = CGSize(width: 1400, height: 280)
+
+        // Make sure the SwiftUI view fills the full area provided by the view controller
+        host.view.translatesAutoresizingMaskIntoConstraints = false
+        host.view.topAnchor.constraint(equalTo: self.view.topAnchor).isActive = true
+        host.view.leadingAnchor.constraint(equalTo: self.view.leadingAnchor).isActive = true
+        host.view.trailingAnchor.constraint(equalTo: self.view.trailingAnchor).isActive = true
+        host.view.bottomAnchor.constraint(equalTo: self.view.bottomAnchor).isActive = true
+        self.view.bringSubviewToFront(host.view)
+    }
+    
+}
