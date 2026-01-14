@@ -20,14 +20,14 @@ struct keyqExtensionMainView: View {
     @State private var persistentPeaks: [String: (peak: keyqExtensionAudioUnit.DetectedPeak, frames: Int)] = [:]
     @State private var timer: Timer?
 
-    // Tunable parameters
-    @State private var smoothingFactor: Float = 0.15
+    // Tunable parameters - optimised defaults from testing
+    @State private var smoothingFactor: Float = 0.5         // Max: smoothest response
     @State private var persistenceThreshold: Float = -60.0
-    @State private var maxPersistenceFrames: Float = 60.0
-    @State private var minPersistenceFrames: Float = 18.0
-    @State private var binRampUp: Float = 2.0
-    @State private var binDecay: Float = 4.0
-    @State private var noteDecay: Float = 1.0
+    @State private var maxPersistenceFrames: Float = 180.0  // Max: longest glow
+    @State private var minPersistenceFrames: Float = 3.0
+    @State private var binRampUp: Float = 0.5
+    @State private var binDecay: Float = 1.0                // Min: slowest fade
+    @State private var noteDecay: Float = 2.8
     @State private var showControls: Bool = false
 
     var body: some View {
@@ -41,101 +41,85 @@ struct keyqExtensionMainView: View {
                 .padding(.horizontal, 8)
                 .padding(.vertical, 8)
 
-            // Control panel toggle and sliders
-            if showControls {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Group {
-                            Text("FFT Smoothing").font(.caption).foregroundColor(.white.opacity(0.7))
-                            HStack {
-                                Text("0").font(.caption2).foregroundColor(.white.opacity(0.5))
-                                Slider(value: $smoothingFactor, in: 0.0...0.5)
-                                Text("0.5").font(.caption2).foregroundColor(.white.opacity(0.5))
-                                Text(String(format: "%.2f", smoothingFactor)).font(.caption2).foregroundColor(.yellow).frame(width: 35)
-                            }
-                        }
-
-                        Group {
-                            Text("Brightness Time (frames)").font(.caption).foregroundColor(.white.opacity(0.7))
-                            HStack {
-                                Text("30").font(.caption2).foregroundColor(.white.opacity(0.5))
-                                Slider(value: $maxPersistenceFrames, in: 30.0...180.0)
-                                Text("180").font(.caption2).foregroundColor(.white.opacity(0.5))
-                                Text(String(format: "%.0f", maxPersistenceFrames)).font(.caption2).foregroundColor(.yellow).frame(width: 35)
-                            }
-                        }
-
-                        Group {
-                            Text("Brightness Ramp-Up").font(.caption).foregroundColor(.white.opacity(0.7))
-                            HStack {
-                                Text("0.5").font(.caption2).foregroundColor(.white.opacity(0.5))
-                                Slider(value: $binRampUp, in: 0.5...5.0)
-                                Text("5").font(.caption2).foregroundColor(.white.opacity(0.5))
-                                Text(String(format: "%.1f", binRampUp)).font(.caption2).foregroundColor(.yellow).frame(width: 35)
-                            }
-                        }
-
-                        Group {
-                            Text("Brightness Decay").font(.caption).foregroundColor(.white.opacity(0.7))
-                            HStack {
-                                Text("1").font(.caption2).foregroundColor(.white.opacity(0.5))
-                                Slider(value: $binDecay, in: 1.0...10.0)
-                                Text("10").font(.caption2).foregroundColor(.white.opacity(0.5))
-                                Text(String(format: "%.1f", binDecay)).font(.caption2).foregroundColor(.yellow).frame(width: 35)
-                            }
-                        }
-
-                        Group {
-                            Text("Note Min Frames").font(.caption).foregroundColor(.white.opacity(0.7))
-                            HStack {
-                                Text("3").font(.caption2).foregroundColor(.white.opacity(0.5))
-                                Slider(value: $minPersistenceFrames, in: 3.0...60.0)
-                                Text("60").font(.caption2).foregroundColor(.white.opacity(0.5))
-                                Text(String(format: "%.0f", minPersistenceFrames)).font(.caption2).foregroundColor(.yellow).frame(width: 35)
-                            }
-                        }
-
-                        Group {
-                            Text("Note Decay").font(.caption).foregroundColor(.white.opacity(0.7))
-                            HStack {
-                                Text("0.5").font(.caption2).foregroundColor(.white.opacity(0.5))
-                                Slider(value: $noteDecay, in: 0.5...5.0)
-                                Text("5").font(.caption2).foregroundColor(.white.opacity(0.5))
-                                Text(String(format: "%.1f", noteDecay)).font(.caption2).foregroundColor(.yellow).frame(width: 35)
-                            }
-                        }
-
-                        Group {
-                            Text("Persistence Threshold (dB)").font(.caption).foregroundColor(.white.opacity(0.7))
-                            HStack {
-                                Text("-80").font(.caption2).foregroundColor(.white.opacity(0.5))
-                                Slider(value: $persistenceThreshold, in: (-80.0)...(-40.0))
-                                Text("-40").font(.caption2).foregroundColor(.white.opacity(0.5))
-                                Text(String(format: "%.0f", persistenceThreshold)).font(.caption2).foregroundColor(.yellow).frame(width: 35)
-                            }
-                        }
-                    }
-                    .padding(12)
+            // Toggle button - always visible
+            Button(action: {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    showControls.toggle()
                 }
-                .frame(height: 200)
-                .background(Color.black.opacity(0.3))
-            }
-
-            // Toggle button
-            Button(action: { showControls.toggle() }) {
-                HStack {
+            }) {
+                HStack(spacing: 4) {
                     Image(systemName: showControls ? "chevron.down" : "chevron.up")
+                        .font(.system(size: 10))
                     Text(showControls ? "Hide Controls" : "Show Controls")
+                        .font(.caption2)
                 }
-                .font(.caption)
-                .foregroundColor(.white.opacity(0.7))
-                .padding(.vertical, 4)
+                .foregroundColor(.white.opacity(0.6))
                 .frame(maxWidth: .infinity)
+                .padding(.vertical, 6)
+                .background(Color.black.opacity(0.2))
             }
             .buttonStyle(.plain)
-            .background(Color.black.opacity(0.2))
+
+            // Control panel with rotary knobs (hidden by default)
+            if showControls {
+                HStack(spacing: 12) {
+                    RotaryKnob(
+                        label: "Smoothing",
+                        value: $smoothingFactor,
+                        range: 0.0...0.5,
+                        valueFormatter: { String(format: "%.2f", $0) }
+                    )
+
+                    RotaryKnob(
+                        label: "Brightness\nTime",
+                        value: $maxPersistenceFrames,
+                        range: 30.0...180.0,
+                        valueFormatter: { String(format: "%.0f", $0) }
+                    )
+
+                    RotaryKnob(
+                        label: "Ramp-Up",
+                        value: $binRampUp,
+                        range: 0.5...5.0,
+                        valueFormatter: { String(format: "%.1f", $0) }
+                    )
+
+                    RotaryKnob(
+                        label: "Decay",
+                        value: $binDecay,
+                        range: 1.0...10.0,
+                        valueFormatter: { String(format: "%.1f", $0) }
+                    )
+
+                    RotaryKnob(
+                        label: "Note Min",
+                        value: $minPersistenceFrames,
+                        range: 3.0...60.0,
+                        valueFormatter: { String(format: "%.0f", $0) }
+                    )
+
+                    RotaryKnob(
+                        label: "Note\nDecay",
+                        value: $noteDecay,
+                        range: 0.5...5.0,
+                        valueFormatter: { String(format: "%.1f", $0) }
+                    )
+
+                    RotaryKnob(
+                        label: "Threshold",
+                        value: $persistenceThreshold,
+                        range: (-80.0)...(-40.0),
+                        valueFormatter: { String(format: "%.0fdB", $0) }
+                    )
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 12)
+                .background(Color.black.opacity(0.3))
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
         }
-        .frame(minWidth: 1200, idealWidth: 1400, maxWidth: .infinity, minHeight: 260, idealHeight: showControls ? 540 : 280, maxHeight: showControls ? 600 : 320)
+        .frame(minWidth: 800, idealWidth: 1400, maxWidth: .infinity,
+               minHeight: 200, idealHeight: showControls ? 380 : 280, maxHeight: .infinity)
         .background(Color(white: 0.15))
         .onAppear {
             startFFTUpdates()
