@@ -38,6 +38,7 @@ struct keyqExtensionMainView: View {
                 .map { $0.peak }
 
             FFTView(magnitudes: smoothedMagnitudes, binPersistence: binPersistence, sampleRate: sampleRate, fftSize: fftSize, peaks: Array(sustainedPeaks))
+                .frame(maxHeight: .infinity)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 8)
 
@@ -118,8 +119,7 @@ struct keyqExtensionMainView: View {
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
-        .frame(minWidth: 800, idealWidth: 1400, maxWidth: .infinity,
-               minHeight: 200, idealHeight: showControls ? 380 : 280, maxHeight: .infinity)
+        .frame(width: pluginWidth, height: showControls ? pluginHeightWithControls : pluginHeight)
         .background(Color(white: 0.15))
         .onAppear {
             startFFTUpdates()

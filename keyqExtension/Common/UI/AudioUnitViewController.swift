@@ -15,10 +15,11 @@ private let log = Logger(subsystem: "Audieaux.keyqExtension", category: "AudioUn
 @MainActor
 public class AudioUnitViewController: AUViewController, AUAudioUnitFactory {
     var audioUnit: AUAudioUnit?
-    
+
     var hostingController: HostingController<keyqExtensionMainView>?
-    
+
     private var observation: NSKeyValueObservation?
+
 
 	/* iOS View lifcycle
 	public override func viewWillAppear(_ animated: Bool) {
@@ -53,7 +54,10 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory {
 
     public override func viewDidLoad() {
         super.viewDidLoad()
-        
+
+        // Set preferred size once, like Apple's example
+        preferredContentSize = CGSize(width: pluginWidth, height: pluginHeight)
+
         // Accessing the `audioUnit` parameter prompts the AU to be created via createAudioUnit(with:)
         guard let audioUnit = self.audioUnit else {
             return
@@ -102,27 +106,19 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory {
             host.removeFromParent()
             host.view.removeFromSuperview()
         }
-        
+
         guard let observableParameterTree = audioUnit.observableParameterTree,
               let keyqAU = audioUnit as? keyqExtensionAudioUnit else {
             return
         }
-        
+
         let content = keyqExtensionMainView(parameterTree: observableParameterTree, audioUnit: keyqAU)
         let host = HostingController(rootView: content)
-
-        // Configure hosting controller sizing for macOS
-        #if os(macOS)
-        host.sizingOptions = [.preferredContentSize]
-        #endif
 
         self.addChild(host)
         host.view.frame = self.view.bounds
         self.view.addSubview(host.view)
         hostingController = host
-
-        // Set preferred content size to match SwiftUI view's ideal dimensions
-        self.preferredContentSize = CGSize(width: 1400, height: 280)
 
         // Make sure the SwiftUI view fills the full area provided by the view controller
         host.view.translatesAutoresizingMaskIntoConstraints = false
