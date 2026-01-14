@@ -46,7 +46,7 @@ struct FFTView: View {
                 }
                 .frame(maxWidth: .infinity)
             }
-            .frame(height: 180)
+            .frame(maxHeight: .infinity)
 
             // Dedicated note display bar
             Canvas { context, size in
